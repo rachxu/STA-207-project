@@ -1,0 +1,358 @@
+---
+title: "Analysis on Effect of Vaccination and Mask on COVID-19 Death in the U.S."
+author: "Qiushuang/Rachel Xu 914724427; team 7"
+date: "3/10/2022"
+output: 
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+
+```{=html}
+<style type="text/css">
+  body{
+  font-size: 11.6pt;
+}
+</style>
+```
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+The COVID-19 pandemic is a currently ongoing global pandemic. First declared as a Public Health Emergency of International Concern on January 30th, 2020 and a pandemic on March 11th, 2020, this widespread pandemic has caused over 5 million deaths worldwide. The virus behind this pandemic is SARS-CoV-2, which is not particularly deadly, yet its prolonged dormant period, mutate ability and high contagiousness all made addressing the situation more challenging.
+
+After two years of fighting the pandemic, scientists have developed tools like mRNA, vector, and protein subunit vaccines in order to continue to curb its growth. However, some professionals have proposed that there is no prospect of eliminating the virus; instead, it will become the "new flu" and continue to coexist with humans. As new variants (e.g., delta variant in 2020 and omicron variant in 2021) continue to be discovered, we see that the trend of mutation is indeed [increasing in contagiousness, even for the vaccinated population](https://www.yalemedicine.org/news/covid-19-variants-of-concern-omicron), indicating that its existence during flu season (or even year-round) may eventually become the new norm.
+
+Despite the outlook, global governments are still striving to prevent spikes in COVID-19 cases and depletion of medical resources. Other than providing vaccination to the public, they also have policies like stay-at-home order and mask mandates in place. In the U.S. for example, some states are [considering mandating COVID vaccination on employers](https://www.natlawreview.com/article/california-legislature-considers-employer-vaccine-mandate).
+
+Numerous studies have been conducted to study the effectiveness of these measures. Some indicate that [vaccination helps to reduce the risks of hospitalization and death](https://www.nejm.org/doi/full/10.1056/NEJMoa2117128) and [wide adaptations of masks decrease community transmission](https://www.pnas.org/doi/10.1073/pnas.2014564118). However, given the nature of this pandemic, medical professionals also suggest people to [remain masked post-vaccination](https://www.cnbc.com/2021/07/27/cdc-to-reverse-indoor-mask-policy-to-recommend-them-for-fully-vaccinated-people-in-covid-hot-spots.html). Subsequently, some have claimed that vaccines and/or masks do not work as effectively as the government stated.
+
+In the light of these research findings and public discussions on these policies, we would like to look at these two factors together while exploring their potential interactive effect on COVID situation. That is to say, we will focus on these two measures of control and [analyze their (interactive) effects on COVID-19 situation in some of the states of United States by building a model that uses vaccination rates and the percentage of population under mask mandate to explain COVID-19 deaths statistic **in each state**.]{.ul} By attempting to answer this question, we hope to shed some light on the validity of anti-vaccine/anti-mask claims and how governments should implement the two preventive measures.
+
+To achieve this goal, we will use the following datasets and extract some useful variables:
+
++-------------------------------+---------------------------------+--------------------------------------------------+
+| Data name                     | Source                          | Variables used                                   |
++:=============================:+:===============================:+:================================================:+
+| WHO COVID-19 data             | [WHO](https://covid19.who.int/) | (visualization purpose)                          |
++-------------------------------+---------------------------------+--------------------------------------------------+
+| COVID-19 case and death data  | [CDC](https://data.cdc.gov/)    | state-level infected and death cases             |
++-------------------------------+---------------------------------+--------------------------------------------------+
+| U.S. public mask mandate data | [CDC](https://data.cdc.gov/)    | county-level mask policy statues (yes/no)        |
++-------------------------------+---------------------------------+--------------------------------------------------+
+| U.S. vaccination data         | [CDC](https://data.cdc.gov/)    | county-level vaccination & population statistics |
++-------------------------------+---------------------------------+--------------------------------------------------+
+
+: Main datasets used and their key variables
+
+Some helper datasets were also used, e.g. a name dataset to make joining data that codes state names differently possible.
+
+# Background
+
+The United States is one of the most impacted countries by the pandemic in the world. As of today (2022/03/12), the U.S. has the most cumulative infected cases and deaths among all countries. This outcome forms a rather stark contrast with the facts that the U.S. has relatively low population density ([174th in the world](https://worldpopulationreview.com/country-rankings/countries-by-density)) and highest [Global Health Security (GHS) score](https://www.ghsindex.org/) among all countries.
+
+Additionally, states within the country have implemented policies that vary a lot on strictness. This indicator often correlates with a state's political stance; states that are more liberal are more likely to enforce mask mandates, while those that are more conservative tend to not do so. From this perspective, the collection of these states constitute a good research object for the topic, since the sample will be more diverse on the variables instead of uniform.
+
+Previous studies with similar scope have shown that [mask mandates help to reduce transmission and cases in the U.S.](https://www.healthaffairs.org/doi/10.1377/hlthaff.2021.01072) However, in this study, we will choose the response variable to be a death statistic instead of infection statistic, because as mentioned above, the SARS-CoV-2 is mutating with a trend of increase in contagiousness; thus, death will be a better indicator that has discrepancy between population of difference vaccination and mask status.
+
+In this project, we will focus on how COVID **death cases** are affected by the two measures. We make this choice because vaccination does not necessarily prevent infection, especially with the new variants, and thus we expect to see stronger correlation between the predictors and the death variable.
+
+More specifically, this study will use a 7-day average of death cases as the response variable, to reduce the number of negative entries (potentially due to error in records). This response variable is obtained from the U.S. case/death data as a moving average of the new (daily) death cases. To reiterate, each observation will be at a state level.
+
+We have also chosen the range of dates in this study to be between Dec 2022 and Aug 2021. This range is decided by the availability of data as well as pandemic progress in the U.S. For example, the mask mandate was not in place until the beginning of 2021. The 8-9 month period we chose is available in all datasets used. I.e., it's a common range of dates.
+
+The datasets used contain different covariates. The vaccination covariate is from U.S. vaccination data; it is the cumulative vaccination in each state. The mask policy covariate is from the mask mandate data aggregated by state: we calculated the percentage of population that is under mask mandate in each state on every date.
+
+Next, we will look at these data more closely.
+
+# Descriptive Analysis and EDA
+
+```{r library}
+# packages required prior to running the code
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(zoo)
+library(olsrr)
+#library(MASS)   will run later in code to avoid conflict
+
+# all the data used in the project can be found in GitHub repository: https://github.com/rachxu/STA-207-project 
+# download them to the same directory as the rmd file to run it
+```
+
+```{r datasets, echo=F}
+who = read.csv("who_covid.csv")     # WHO data
+us = read.csv("usa.csv")            # US case/death data
+vax = read.csv("vax2.csv")          # vaccination data
+mask = read.csv("mask.csv")         # mask data
+
+name = read.csv("names.csv")        # for merging differently-coded data
+```
+
+We will start with the WHO data. By selecting countries that currently have the most amount of cumulative cases (infection and death), we were able to create the graph below. It can be seen that since the global onset of the pandemic, the U.S. was the first among the 5 countries to progress (around April 2020), and has since had the most amount of cumulative cases than any other country.
+
+```{r WHO plot, eval=F}
+g1 = who %>% mutate(Date=as.Date(Date_reported, "%Y-%m-%d")) %>%  # code date as date format
+  filter(Country_code %in% c("US","IN","BR","FR","GB")) %>%  # top 5 cumu case
+  ggplot(aes(x=Date,y=Cumulative_cases, colour=Country)) +
+  geom_line() +
+  ylab("") +
+  ggtitle("Cumulative cases among top 5") +
+  scale_colour_manual(name = "grp",values = c("blue", "grey","orange","azure4","green")) +
+  theme(legend.position = "none")
+
+g2 = who %>% mutate(Date=as.Date(Date_reported, "%Y-%m-%d")) %>%  # code date as date format
+  filter(Country_code %in% c("US","IN","BR","FR","GB")) %>%  # top 5 cumu case
+  ggplot(aes(x=Date,y=Cumulative_deaths, colour=Country)) +
+  geom_line() +
+  ylab("") +
+  ggtitle("Cumulative deaths among top 5") +
+  scale_colour_manual(name = "grp",values = c("blue", "grey","orange","azure4","green")) +
+  theme(legend.position = c(0.1,0.7))
+
+
+ggarrange(g1,g2)
+```
+
+Next we will focus on the domestic datasets (the ones used to model). The first one we'll introduce is the vaccination data. Each observation in this data corresponds to a county on a date that is between 12/13/2020 and 03/13/2022. 
+
+5 columns will be selected from vaccination dataset: `Date`, `County` (county name), `State` (state the county is located at), `Completeness_pct` (% of people who are fully vaccinated in that county), `Series_Complete_Yes` (# of people fully vaccinated in that county) and `Census2019` (2019 Census county population). 
+
+Among all observations, less than 2% have missing values in county population count, and some rows have "UNK" (unknown) as the state name. This is presumably due to the fact that U.S. tribes and outlying islands were included along with the continental states in this data. Thus, we will remove this small faction of rows.
+
+Additionally, with these existing columns, we can create `State_pop` (state population) and `State_pct_v` (% of people who are fully vaccinated in the state), as well as `obs` which is a unique identifier for counties (since some counties from different states have the same name). After the procedure, below is a snippet of the final vaccination data.
+
+```{r vax df}
+vax = read.csv("vax2.csv") 
+vax2 = vax %>% mutate(date = as.Date(as.Date(Date, "%m/%d/%Y"))) %>%
+  rename(State=Recip_State, County=Recip_County) %>%
+  filter(!is.na(Census2019) & State!="UNK") %>%
+  group_by(State, date) %>%
+  mutate(State_pop = sum(Census2019), 
+            State_comp = sum(Series_Complete_Yes),
+            State_pct_v = State_comp/State_pop)  %>%
+  ungroup() %>%
+  mutate(obs = paste(County, State, sep = ", ")) %>%
+  dplyr::select(date, obs, State, Census2019, State_pop, State_pct_v)
+  
+knitr::kable(head(vax2, 3))
+```
+
+An visualization of the vaccination data is made to demonstrate the mutated variable across states and dates. We can see that there are two particular states with questionable trend: one remained zero throughout the entire time range and so did the other until it skyrocketd after Oct 2021. These two states are Hawaii and Texas, and we suspect their statistics look they way they do is the states did not inform CDC of their accurate vaccination counts in a timely mannder (or at all, for Hawaii). 
+
+```{r vax vis}
+vax2 %>% group_by(date, State) %>% slice(1) %>%
+  ggplot(aes(x=date, y=State_pct_v, colour=State)) +
+  geom_line(size=0.2) +
+  ggtitle("Change in vax rate in each state") +
+  xlab(" ") +
+  theme(legend.key.size = unit(4, 'mm'),
+        legend.text = element_text(size=5))
+```
+
+Next we will introduce the mask policy data. As briefly mentioned before, the key variable in this data is binary, i.e., yes or no, and each observation corresponds to the policy status of a county, on a date that is between 04/10/2020 and 08/15/2021: unfortunately, this data was not as up-to-date as the vaccination data, and it only covers a time period that is 16 months long. 
+
+The snippet shows the columns that we chose and mutated from the original data. `date`, `County`, `Code` (acronym of the state each observation belongs to) and `Policy` (a factor, "yes"=mask mandate in place for a given state on a specific data, otherwise "no").
+
+```{r mask df}
+mask2 = mask %>% mutate(date = as.Date(date, "%m/%d/%Y"),
+                Policy=as.factor(Face_Masks_Required_in_Public)) %>%
+  rename(Code = State_Tribe_Territory,
+         County = County_Name) %>%
+  left_join(name, by="Code") %>% 
+  select(date, County, Code, Policy) 
+
+knitr::kable(head(mask2, 3))
+```
+
+Upon examining the data, we find that there is a big proportion of missingness in the key variable. The visualization below suggests the majority of the missingness in `Policy` predates 2021. This is because mask mandate was not in place in the U.S. prior to that. I.e., the vast majority of those NA's should be "no". To obtain a data with a more balanced distribution of "yes" and "no", we considering removing those entries that predate 2021. Furthermore, most of the missing entries are from a small fraction of the states; if we were to exclude those states, we can bring down the percentage of missing values. Among the remaining entries that still have NA in the key variable, we will fill them with 0. 
+
+```{r mask vis}
+g3 = mask2 %>% filter(is.na(Policy)) %>% 
+  group_by(date) %>% summarise(`# of NA's`=n()) %>% 
+  ggplot(aes(x=date, y=`# of NA's`)) +
+  geom_bar(aes(x=date,y=`# of NA's`),stat="identity", alpha=0.5) +
+  ggtitle("NA of mask policy on each date")
+
+g4 = mask2 %>% filter(date>as.Date('2021-01-01')) %>% 
+  group_by(Code) %>% summarise(across(everything(), ~ sum(is.na(Policy)))) %>%
+  ggplot(aes(x = reorder(Code, desc(Policy)), y=Policy)) +
+  geom_bar(aes(x = reorder(Code, desc(Policy)),y=Policy),stat="identity", alpha=0.5) +
+  ggtitle("NA of mask policy in each state") +
+  xlab("State") + ylab("") +
+  theme(axis.text.x = element_text(angle=90, hjust=1, size=5)) 
+
+ggarrange(g3,g4)
+```
+
+After adjusting the range of mask mandate data, we add a new column, `State_pct_m` to describe the percentage of population that is under mask mandate on a given day within a given state, with the help of a county-level population data. The summary table of this updated data shows that the minimum of percentage of population masked in the time period is 0 (no county of that state had mandates) and the maximum is 1 (all counties had mandates). 
+
+Before joining the vaccine data to mask data in order to add population column, we need to concatenate the county and state variables. This is because some counties in different state share the same name. In this process, we also inevitably have to sacrifice some of the observations dated outside the range we specified.
+
+```{r update mask, echo=F, message=F}
+na_st = c("GA","MO","TN","OK","IA","FL","SD","SC","ID","AK","AL","AZ") # states with most NA's
+
+`%!in%` = Negate(`%in%`) # create operator notin
+
+# create county population data from vax2
+ctypop = vax2 %>% group_by(obs) %>% slice(1)
+
+masked = mask2 %>%
+  filter(Code %!in% na_st & date %in% seq(as.Date("2020/12/13"), as.Date("2021/8/15"), "days")) %>%
+  mutate(obs = paste(County, Code, sep=", ")) %>%
+  right_join(ctypop, by="obs") %>%
+  mutate(Mask = ifelse(Policy=="Yes",1,0)) %>%
+  mutate(Mask = if_else(is.na(Mask), 0, Mask),
+         pop_mask = Census2019*Mask) %>% 
+  group_by(date.x, Code) %>%
+  summarise(state_mask = sum(pop_mask),
+            Policy=Policy,
+            State_pop = State_pop,
+            .groups = 'drop') %>%
+  group_by(Code, date.x) %>% slice(1) %>%
+  mutate(State_pct_m = state_mask/State_pop)
+
+knitr::kable(head(masked, 3))
+```
+
+Finally, we will look at the state-wise case/death data that contains response variable, where each observation corresponds to a U.S. county on a date between 2020/02/04 and 2022/03/13. Again, this range of dates does not exactly match those of the other datasets; thus, only observations from date that they have in common will be retained. 
+
+For this data that contains 15 variables, some related to infection case and deaths, we will select the following 3: `submission_date` (date of counts), `state`, and `new_death` (number of new deaths). We noticed some observations have negative values in `new_death`, potentially due to entry error or calculation error. Before moving on, we will remove these rows. 
+
+Then using `new_death`, we create two additional columns, which are 7-day moving average of new death and 14-day moving average of new death, with `rollmean` from package `zoo`. The rows where NA's were produced, we fill them with zero. We chose to mutate these columns as candidates for response variable in our model, considering factors like "masks will most likely have a lagged effect on death case since they work by lowering transmission".
+
+The final U.S. death data is summarized below. We can see that `death_lag_7` is distributed differently from original variable, whose skewness can be seen from its 1st quantile and median. The `death_lag_14` has even smaller maximum compared to 7_day average, due to the extent it further smooths the curve. 
+
+```{r case df}
+us2 = us %>% 
+  filter(new_death>=0) %>%
+  mutate(submission_date = as.Date(submission_date, "%m/%d/%Y"),
+         death_lag_7 = rollmean(new_death, k=7, fill=0),
+         death_lag_14 = rollmean(new_death, k=14, fill=0)) %>%
+  select(submission_date, state, new_death, death_lag_7, death_lag_14) 
+  
+knitr::kable(summary(us2))
+```
+
+By visualizing these two variables by themselves and log-transformed, we can see that both moving averages are highly skewed. Using log-transformation as an initial guess, their distribution were significantly improved. Additionally, 14-day lagged death (log) might be a better candidate since it has more approximately normal distribution.
+
+```{r case vis}
+par(mfrow=c(2,2))
+hist(us2$death_lag_7, breaks=20, main="7 day MA death")
+hist(log(us2$death_lag_7), breaks=20, main="7 day MA death, log")
+hist(us2$death_lag_14, breaks=20, main="14 day MA death")
+hist(log(us2$death_lag_14), breaks=20, main="14 day MA death, log")
+```
+
+
+
+# Inferencial Analysis
+
+After obtaining the final dataset, we begin to fit the model. The model we will use in this project is a multiple regression model, i.e.,
+
+$$
+Y_i = \beta_0 + \beta_{vax,i} + \beta_{mask,i} + \epsilon_{i}
+$$
+
+$Y_i$ would be the 7-day moving average of new deaths, $\beta_{vax,i}$ and $\beta_{mask,i}$ are coefficients associated with vaccination rates and percentage of population under mask mandate, respectively. $\epsilon_i$'s are the error term.
+
+```{r final df}
+# final sub-data for joining, using obs: a comb of state and date
+us_f = us2 %>% filter(submission_date %in% seq(as.Date("2020/12/13"), as.Date("2021/8/15"), "days")) %>% 
+  unite(obs, c("state", "submission_date"), sep=", ")
+  
+vax_f = vax2 %>% filter(date %in% seq(as.Date("2020/12/13"), as.Date("2021/8/15"), "days")) %>%
+  unite(obs, c("State", "date"), sep=", ")
+mask_f = masked %>% filter(date.x %in% seq(as.Date("2020/12/13"), as.Date("2021/8/15"), "days")) %>%
+  unite(obs, c("Code", "date.x"), sep=", ")
+
+final = mask_f %>% left_join(vax_f, by="obs") %>% left_join(us_f, by="obs") %>% 
+  group_by(obs) %>% slice(1) %>%
+  dplyr::select(obs, State_pct_v, State_pct_m, death_lag_7, death_lag_14) %>%
+  filter(death_lag_7>0 & death_lag_14 >0)
+
+knitr::kable(final, 3)
+```
+
+By taking a look at the fitted coefficients of the initial model, we can see that all coefficients are highly significant. However, we are surprised to find that the one associated with mask percentage is positive. That is to say, the more people mask in a state on a given day, the higher 7-day moving average of death become. This is quite surprising and might indicate inaccuracy in the model. This may be indicative of potential problems.
+
+```{r fit0}
+fit0 = lm(death_lag_7~State_pct_v+State_pct_m, data=final)
+knitr::kable(summary(fit0)$coef)
+```
+
+Since the EDA already showed that the response variable we used is skewed, we will find a reasonable transformation. Box-Cox suggests we should choose $\lambda=0$, which is a log transformation. We fit the model accordingly.
+
+```{r}
+library(MASS)
+boxcox(fit0)
+```
+
+After the transformation, the coefficients changed accordingly. However, the one associated with mask is still positive. We will continue the sensitivity analysis with this observation in mind.
+
+```{r fit1}
+fit1 = lm(log(death_lag_7)~State_pct_v+State_pct_m, data=final)
+knitr::kable(summary(fit1)$coef)
+```
+
+
+# Sensitivity Analysis
+
+We will begin by visualizing and examining the log-transformed model fitting to `death_lag_7`. The residuals appear to be even spread out around zero, and they are approximately normally distributed with somewhat heavy deviation on left tail. We suspect a violation of the normality assumption.
+
+```{r}
+fit1 = lm(log(death_lag_7)~State_pct_v+State_pct_m, data=final)
+par(mfrow=c(2,2))
+plot(fit1, cex=0.1,col = rgb(red = 0, green = 0, blue = 0,alpha=0.5))
+```
+
+As an alternative, we will also discover using 14-day moving average new death as the response variable, log transformed (since 7-day MA and 14-day MA are distributed very similarly). 
+
+We are surprised to find out that the normality violation is indeed improved, other than a few outliers present in the graph. The equal variance assumption is also verified with `ols_test_breusch_pagan()`, which returned a large p-value of 0.62.
+
+
+
+```{r diagnostic}
+fit2 = lm(log(death_lag_14)~State_pct_v+State_pct_m, data=final)
+par(mfrow=c(2,2))
+plot(fit2, cex=0.1,col = rgb(red = 0, green = 0, blue = 0,alpha=0.5))
+```
+
+
+```{r summary}
+knitr::kable(summary(fit2)$coef)
+```
+
+Before concluding, we will finally look at whether there exists an interaction between the two independent variables. According to the summary output, we should not include such a term in the model because it highly insignificant.
+
+```{r interaction}
+fit3 = lm(log(death_lag_14)~State_pct_v*State_pct_m, data=final)
+knitr::kable(summary(fit3)$coef)
+
+```
+
+# Conclusion
+
+
+We conclude this project with the statement that **the 7-day moving average of new death cases is significantly affected by the vaccination rate and percentage of population under mask mandate in a state on a given day**. One surprise about our conclusion is that the coefficient associated with mask percentage is in fact positive. 
+
+# Limitations and Future Work
+
+-   The datasets used in this project is limited to the availability of resources. For example, the mask mandate data has huge chunks of data missing and is not up-to-date. The remedy we toook is not ideal, and hould more data be obtained in the future, the model used here can be used to fit to the new data to obtain more accurate results.
+-   This project also did not cover causal inference, which is partially due to the unavailability of data, as well as the fact that all of the datasets used are observational data. One method future analysis can use is sample matching. By matching 
+-   We are surprised to have discovered a positive relationship between the percentage of population masked in a state and its new death case. However, we also observed a trend of decrease while improving the model. In the future, we could attempt to lag the death case for mask variable and vaccination variable differently, considering that mask will probably have a lagged effect on COVID cases.
+
+# Reference
+
+-   <https://www.yalemedicine.org/news/covid-19-variants-of-concern-omicron>
+-   <https://www.natlawreview.com/article/california-legislature-considers-employer-vaccine-mandate>
+-   <https://www.nejm.org/doi/full/10.1056/NEJMoa2117128>
+-   <https://www.pnas.org/doi/10.1073/pnas.2014564118>
+-   <https://www.cnbc.com/2021/07/27/cdc-to-reverse-indoor-mask-policy-to-recommend-them-for-fully-vaccinated-people-in-covid-hot-spots.html>
+-   <https://ggplot2.tidyverse.org/reference/scale_continuous.html>
+-   <https://stackoverflow.com/questions/26273663/r-how-to-total-the-number-of-na-in-each-col-of-data-frame>
+-   <https://r-lang.com/not-in-r/>
+-   <https://stackoverflow.com/questions/25677035/how-to-create-a-range-of-dates-in-r>
