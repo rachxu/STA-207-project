@@ -1,2 +1,4 @@
-# STA-207-project
-Final project for STA 207 winter 2022
+# STA 207 project - Analysis on Effect of Vaccination and Mask on COVID-19 Death in the U.S.
+
+
+In the light of these research findings and public discussions on these policies, we would like to look at these two factors together while exploring their potential interactive effect on COVID situation. That is to say, we will focus on these two measures of control and analyze their potentially interactive effects on COVID-19 situation in some of the states of United States by building a model that uses vaccination rates and the percentage of population under mask mandate to explain COVID-19 deaths statistic **in each state**. By attempting to answer this question, we hope to shed some light on the validity of anti-vaccine/anti-mask claims and how governments should implement the two preventive measures.
