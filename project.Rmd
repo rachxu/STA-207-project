@@ -274,7 +274,7 @@ final = mask_f %>% left_join(vax_f, by="obs") %>% left_join(us_f, by="obs") %>%
   dplyr::select(obs, State_pct_v, State_pct_m, death_lag_7, death_lag_14) %>%
   filter(death_lag_7>0 & death_lag_14 >0)
 
-knitr::kable(final, 3)
+knitr::kable(head(final, 3))
 ```
 
 By taking a look at the fitted coefficients of the initial model, we can see that all coefficients are highly significant. However, we are surprised to find that the one associated with mask percentage is positive. That is to say, the more people mask in a state on a given day, the higher 7-day moving average of death become. This is quite surprising and might indicate inaccuracy in the model. This may be indicative of potential problems.
